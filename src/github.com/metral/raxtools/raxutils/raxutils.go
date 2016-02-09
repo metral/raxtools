@@ -1,6 +1,7 @@
 package raxutils
 
 import (
+	"errors"
 	"flag"
 
 	"github.com/rackspace/gophercloud"
@@ -15,33 +16,45 @@ var (
 	TenantID         = flag.String("tenantID", "", "Openstack Tenant ID")
 )
 
-type AuthConfig struct {
-	IdentityEndpoint string
-	Username         string
-	Password         string
-	TenantID         string
-}
-
-func CreateToken(c *AuthConfig) (*tokens.Token, error) {
-	authOpts := gophercloud.AuthOptions{
-		IdentityEndpoint: c.IdentityEndpoint,
-		Username:         c.Username,
-		Password:         c.Password,
-		TenantID:         c.TenantID,
-	}
-
+func NewIdentityClient(a gophercloud.AuthOptions) (*gophercloud.ServiceClient, error) {
 	// authenticate with provider
-	provider, err := openstack.AuthenticatedClient(authOpts)
+	provider, err := openstack.AuthenticatedClient(a)
 	if err != nil {
 		return nil, err
 	}
 
 	// Create a new client to the provider
 	client := openstack.NewIdentityV2(provider)
+	if client == nil {
+		return nil, errors.New("Could not create new identity client")
+	}
 
-	// Create a new token to the provider
-	opts := tokens.WrapOptions(authOpts)
-	token, err := tokens.Create(client, opts).ExtractToken()
+	return client, nil
+}
+
+func NewObjectStorageClient(a gophercloud.AuthOptions, region string) (*gophercloud.ServiceClient, error) {
+	// authenticate with provider
+	provider, err := openstack.AuthenticatedClient(a)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a new client to the provider
+	client, err := openstack.NewObjectStorageV1(provider, gophercloud.EndpointOpts{
+		Region: region,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return client, nil
+}
+
+func CreateToken(a gophercloud.AuthOptions, c *gophercloud.ServiceClient) (*tokens.Token, error) {
+	opts := tokens.WrapOptions(a)
+
+	// Create a new token
+	token, err := tokens.Create(c, opts).ExtractToken()
 	if err != nil {
 		return nil, err
 	}
